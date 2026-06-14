@@ -13,6 +13,7 @@ void main() {
               id: 1,
               name: 'bulbasaur',
               imageUrl: '',
+              fallbackImageUrl: '',
               accentColor: Color(0xFFE6F5DD),
             ),
           ]),
@@ -47,12 +48,14 @@ void main() {
               id: 1,
               name: 'bulbasaur',
               imageUrl: '',
+              fallbackImageUrl: '',
               accentColor: Color(0xFFE6F5DD),
             ),
             const PokemonCardData(
               id: 4,
               name: 'charmander',
               imageUrl: '',
+              fallbackImageUrl: '',
               accentColor: Color(0xFFFFEDD8),
             ),
           ]),
@@ -70,5 +73,39 @@ void main() {
 
     expect(find.text('Charmander'), findsOneWidget);
     expect(find.text('Bulbasaur'), findsNothing);
+  });
+
+  testWidgets('tapping a Pokemon card opens details page', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: PokemonExplorerPage(
+          pokemonFuture: Future.value([
+            const PokemonCardData(
+              id: 7,
+              name: 'squirtle',
+              imageUrl: '',
+              fallbackImageUrl: '',
+              accentColor: Color(0xFFE2F0FF),
+            ),
+          ]),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+    await tester.tap(find.byType(PokemonCard));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PokemonDetailsPage), findsOneWidget);
+    expect(find.text('#007'), findsOneWidget);
+    expect(find.text('Official artwork'), findsOneWidget);
+    expect(find.text('Fallback sprite'), findsOneWidget);
+
+    await tester.scrollUntilVisible(
+      find.text('More info'),
+      200,
+      scrollable: find.byType(Scrollable),
+    );
+    expect(find.text('More info'), findsOneWidget);
   });
 }
