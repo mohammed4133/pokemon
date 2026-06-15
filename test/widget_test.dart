@@ -1,27 +1,38 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:provider/provider.dart';
 
 import 'package:team_project/main.dart';
+
+Widget _buildPokemonTestApp(List<PokemonCardData> pokemon) {
+  return ChangeNotifierProvider(
+    create: (_) => PokemonExplorerState(),
+    child: MaterialApp(
+      home: PokemonExplorerPage(pokemonFuture: Future.value(pokemon)),
+    ),
+  );
+}
+
+Future<void> _pumpPastAnimations(WidgetTester tester) async {
+  await tester.pump();
+  await tester.pump(const Duration(seconds: 1));
+}
 
 void main() {
   testWidgets('favorites tab shows saved Pokemon', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: PokemonExplorerPage(
-          pokemonFuture: Future.value([
-            const PokemonCardData(
-              id: 1,
-              name: 'bulbasaur',
-              imageUrl: '',
-              fallbackImageUrl: '',
-              accentColor: Color(0xFFE6F5DD),
-            ),
-          ]),
+      _buildPokemonTestApp([
+        const PokemonCardData(
+          id: 1,
+          name: 'bulbasaur',
+          imageUrl: '',
+          fallbackImageUrl: '',
+          accentColor: Color(0xFFE6F5DD),
         ),
-      ),
+      ]),
     );
 
-    await tester.pumpAndSettle();
+    await _pumpPastAnimations(tester);
 
     expect(find.text('Bulbasaur'), findsOneWidget);
     expect(find.text('No favorites yet'), findsNothing);
@@ -33,7 +44,7 @@ void main() {
         (widget) => widget is Tab && widget.text == 'Favorites',
       ),
     );
-    await tester.pumpAndSettle();
+    await _pumpPastAnimations(tester);
 
     expect(find.text('Bulbasaur'), findsOneWidget);
     expect(find.byIcon(Icons.favorite_rounded), findsWidgets);
@@ -41,35 +52,31 @@ void main() {
 
   testWidgets('search filters Pokemon client-side', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: PokemonExplorerPage(
-          pokemonFuture: Future.value([
-            const PokemonCardData(
-              id: 1,
-              name: 'bulbasaur',
-              imageUrl: '',
-              fallbackImageUrl: '',
-              accentColor: Color(0xFFE6F5DD),
-            ),
-            const PokemonCardData(
-              id: 4,
-              name: 'charmander',
-              imageUrl: '',
-              fallbackImageUrl: '',
-              accentColor: Color(0xFFFFEDD8),
-            ),
-          ]),
+      _buildPokemonTestApp([
+        const PokemonCardData(
+          id: 1,
+          name: 'bulbasaur',
+          imageUrl: '',
+          fallbackImageUrl: '',
+          accentColor: Color(0xFFE6F5DD),
         ),
-      ),
+        const PokemonCardData(
+          id: 4,
+          name: 'charmander',
+          imageUrl: '',
+          fallbackImageUrl: '',
+          accentColor: Color(0xFFFFEDD8),
+        ),
+      ]),
     );
 
-    await tester.pumpAndSettle();
+    await _pumpPastAnimations(tester);
 
     expect(find.byType(PokemonCard), findsNWidgets(2));
     expect(find.byType(RefreshIndicator), findsWidgets);
 
     await tester.enterText(find.byType(TextField), 'char');
-    await tester.pumpAndSettle();
+    await _pumpPastAnimations(tester);
 
     expect(find.text('Charmander'), findsOneWidget);
     expect(find.text('Bulbasaur'), findsNothing);
@@ -77,24 +84,20 @@ void main() {
 
   testWidgets('tapping a Pokemon card opens details page', (tester) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: PokemonExplorerPage(
-          pokemonFuture: Future.value([
-            const PokemonCardData(
-              id: 7,
-              name: 'squirtle',
-              imageUrl: '',
-              fallbackImageUrl: '',
-              accentColor: Color(0xFFE2F0FF),
-            ),
-          ]),
+      _buildPokemonTestApp([
+        const PokemonCardData(
+          id: 7,
+          name: 'squirtle',
+          imageUrl: '',
+          fallbackImageUrl: '',
+          accentColor: Color(0xFFE2F0FF),
         ),
-      ),
+      ]),
     );
 
-    await tester.pumpAndSettle();
+    await _pumpPastAnimations(tester);
     await tester.tap(find.byType(PokemonCard));
-    await tester.pumpAndSettle();
+    await _pumpPastAnimations(tester);
 
     expect(find.byType(PokemonDetailsPage), findsOneWidget);
     expect(find.text('#007'), findsOneWidget);

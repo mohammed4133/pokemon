@@ -1,10 +1,137 @@
 import 'dart:convert';
 
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:provider/provider.dart';
 
 void main() {
-  runApp(const PokemonExplorerApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => PokemonExplorerState(),
+      child: const PokemonExplorerApp(),
+    ),
+  );
+}
+
+const Color _brandColor = Color(0xFF2E7D5B);
+const Color _dangerColor = Color(0xFFE03A5D);
+
+ThemeData _buildPokemonTheme(Brightness brightness) {
+  final colorScheme = ColorScheme.fromSeed(
+    seedColor: _brandColor,
+    brightness: brightness,
+  );
+  final isDark = brightness == Brightness.dark;
+
+  return ThemeData(
+    useMaterial3: true,
+    colorScheme: colorScheme,
+    scaffoldBackgroundColor: isDark
+        ? const Color(0xFF101614)
+        : const Color(0xFFF5F7FA),
+    appBarTheme: AppBarTheme(
+      backgroundColor: isDark
+          ? const Color(0xFF101614)
+          : const Color(0xFFF5F7FA),
+      foregroundColor: colorScheme.onSurface,
+      elevation: 0,
+    ),
+  );
+}
+
+bool _isDark(BuildContext context) {
+  return Theme.of(context).brightness == Brightness.dark;
+}
+
+Color _surfaceColor(BuildContext context) {
+  return _isDark(context) ? const Color(0xFF18211D) : Colors.white;
+}
+
+Color _pageBackground(BuildContext context) {
+  return Theme.of(context).scaffoldBackgroundColor;
+}
+
+Color _softSurfaceColor(BuildContext context) {
+  return _isDark(context) ? const Color(0xFF243029) : const Color(0xFFE9EFEC);
+}
+
+Color _borderColor(BuildContext context) {
+  return _isDark(context) ? const Color(0xFF304138) : const Color(0xFFE3E8E5);
+}
+
+Color _mutedTextColor(BuildContext context) {
+  return Theme.of(context).colorScheme.onSurfaceVariant;
+}
+
+Color _shadowColor(BuildContext context) {
+  return _isDark(context) ? const Color(0x66000000) : const Color(0x0F15211C);
+}
+
+Color _pokemonAccent(BuildContext context, PokemonCardData pokemon) {
+  if (!_isDark(context)) {
+    return pokemon.accentColor;
+  }
+
+  return Color.alphaBlend(
+    Colors.black.withValues(alpha: 0.38),
+    pokemon.accentColor,
+  );
+}
+
+Tween<Rect?> _pokemonMorphRectTween(Rect? begin, Rect? end) {
+  return MaterialRectArcTween(begin: begin, end: end);
+}
+
+Widget _pokemonMorphFlight(
+  PokemonCardData pokemon,
+  BuildContext flightContext,
+  Animation<double> animation,
+  HeroFlightDirection direction,
+  BuildContext fromHeroContext,
+  BuildContext toHeroContext,
+) {
+  return _PokemonMorphFlight(pokemon: pokemon);
+}
+
+class PokemonExplorerState extends ChangeNotifier {
+  ThemeMode _themeMode = ThemeMode.light;
+  final Set<int> _favoriteIds = <int>{};
+  String _searchQuery = '';
+
+  ThemeMode get themeMode => _themeMode;
+  bool get isDarkMode => _themeMode == ThemeMode.dark;
+  String get searchQuery => _searchQuery;
+  Set<int> get favoriteIds => Set<int>.unmodifiable(_favoriteIds);
+  int get favoriteCount => _favoriteIds.length;
+
+  void toggleThemeMode() {
+    _themeMode = isDarkMode ? ThemeMode.light : ThemeMode.dark;
+    notifyListeners();
+  }
+
+  void updateSearch(String value) {
+    if (_searchQuery == value) {
+      return;
+    }
+
+    _searchQuery = value;
+    notifyListeners();
+  }
+
+  void clearSearch() {
+    updateSearch('');
+  }
+
+  void toggleFavorite(PokemonCardData pokemon) {
+    if (_favoriteIds.contains(pokemon.id)) {
+      _favoriteIds.remove(pokemon.id);
+    } else {
+      _favoriteIds.add(pokemon.id);
+    }
+
+    notifyListeners();
+  }
 }
 
 class PokemonExplorerApp extends StatelessWidget {
@@ -12,21 +139,14 @@ class PokemonExplorerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<PokemonExplorerState>();
+
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Pokemon Explorer',
-      theme: ThemeData(
-        useMaterial3: true,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF2E7D5B),
-          brightness: Brightness.light,
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF5F7FA),
-        textTheme: Theme.of(context).textTheme.apply(
-          bodyColor: const Color(0xFF15211C),
-          displayColor: const Color(0xFF15211C),
-        ),
-      ),
+      theme: _buildPokemonTheme(Brightness.light),
+      darkTheme: _buildPokemonTheme(Brightness.dark),
+      themeMode: appState.themeMode,
       home: const PokemonExplorerPage(),
     );
   }
@@ -50,8 +170,6 @@ class PokemonExplorerPage extends StatefulWidget {
 class _PokemonExplorerPageState extends State<PokemonExplorerPage> {
   late Future<List<PokemonCardData>> _pokemonFuture;
   final TextEditingController _searchController = TextEditingController();
-  final Set<int> _favoriteIds = <int>{};
-  String _searchQuery = '';
 
   @override
   void initState() {
@@ -85,36 +203,38 @@ class _PokemonExplorerPageState extends State<PokemonExplorerPage> {
   }
 
   void _updateSearch(String value) {
-    setState(() {
-      _searchQuery = value;
-    });
+    context.read<PokemonExplorerState>().updateSearch(value);
   }
 
   void _clearSearch() {
     _searchController.clear();
-    _updateSearch('');
+    context.read<PokemonExplorerState>().clearSearch();
   }
 
   void _toggleFavorite(PokemonCardData pokemon) {
-    setState(() {
-      if (_favoriteIds.contains(pokemon.id)) {
-        _favoriteIds.remove(pokemon.id);
-      } else {
-        _favoriteIds.add(pokemon.id);
-      }
-    });
+    context.read<PokemonExplorerState>().toggleFavorite(pokemon);
   }
 
-  void _openPokemonDetails(PokemonCardData pokemon) {
+  void _openPokemonDetails(PokemonCardData pokemon, Object heroTag) {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(
-        builder: (context) => PokemonDetailsPage(pokemon: pokemon),
+      PageRouteBuilder<void>(
+        transitionDuration: const Duration(milliseconds: 520),
+        reverseTransitionDuration: const Duration(milliseconds: 360),
+        pageBuilder: (context, animation, secondaryAnimation) {
+          return PokemonDetailsPage(pokemon: pokemon, heroTag: heroTag);
+        },
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            child,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<PokemonExplorerState>();
+    final favoriteIds = appState.favoriteIds;
+    final searchQuery = appState.searchQuery;
+
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -125,10 +245,10 @@ class _PokemonExplorerPageState extends State<PokemonExplorerPage> {
             builder: (context, snapshot) {
               final pokemon = snapshot.data ?? <PokemonCardData>[];
               final favorites = pokemon
-                  .where((item) => _favoriteIds.contains(item.id))
+                  .where((item) => favoriteIds.contains(item.id))
                   .toList(growable: false);
-              final filteredPokemon = _filterPokemon(pokemon, _searchQuery);
-              final filteredFavorites = _filterPokemon(favorites, _searchQuery);
+              final filteredPokemon = _filterPokemon(pokemon, searchQuery);
+              final filteredFavorites = _filterPokemon(favorites, searchQuery);
 
               return NestedScrollView(
                 headerSliverBuilder: (context, innerBoxIsScrolled) {
@@ -136,13 +256,13 @@ class _PokemonExplorerPageState extends State<PokemonExplorerPage> {
                     SliverToBoxAdapter(
                       child: _Header(
                         totalCount: pokemon.length,
-                        favoriteCount: favorites.length,
+                        favoriteCount: appState.favoriteCount,
                         isLoading:
                             snapshot.connectionState ==
                                 ConnectionState.waiting &&
                             pokemon.isEmpty,
                         searchController: _searchController,
-                        searchQuery: _searchQuery,
+                        searchQuery: searchQuery,
                         onSearchChanged: _updateSearch,
                         onClearSearch: _clearSearch,
                       ),
@@ -154,11 +274,11 @@ class _PokemonExplorerPageState extends State<PokemonExplorerPage> {
                           dividerHeight: 0,
                           indicatorSize: TabBarIndicatorSize.tab,
                           indicator: BoxDecoration(
-                            color: const Color(0xFF15211C),
+                            color: Theme.of(context).colorScheme.primary,
                             borderRadius: BorderRadius.circular(8),
                           ),
-                          labelColor: Colors.white,
-                          unselectedLabelColor: const Color(0xFF62706A),
+                          labelColor: Theme.of(context).colorScheme.onPrimary,
+                          unselectedLabelColor: _mutedTextColor(context),
                           labelStyle: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -176,11 +296,11 @@ class _PokemonExplorerPageState extends State<PokemonExplorerPage> {
                   snapshot: snapshot,
                   pokemon: filteredPokemon,
                   favorites: filteredFavorites,
-                  favoriteIds: _favoriteIds,
+                  favoriteIds: favoriteIds,
                   onToggleFavorite: _toggleFavorite,
                   onOpenDetails: _openPokemonDetails,
                   onRefresh: _refreshPokemon,
-                  hasSearchQuery: _searchQuery.trim().isNotEmpty,
+                  hasSearchQuery: searchQuery.trim().isNotEmpty,
                 ),
               );
             },
@@ -227,7 +347,7 @@ class _PokemonBody extends StatelessWidget {
   final List<PokemonCardData> favorites;
   final Set<int> favoriteIds;
   final ValueChanged<PokemonCardData> onToggleFavorite;
-  final ValueChanged<PokemonCardData> onOpenDetails;
+  final void Function(PokemonCardData pokemon, Object heroTag) onOpenDetails;
   final Future<void> Function() onRefresh;
   final bool hasSearchQuery;
 
@@ -245,6 +365,7 @@ class _PokemonBody extends StatelessWidget {
     return TabBarView(
       children: [
         _PokemonGrid(
+          heroNamespace: 'all',
           pokemon: pokemon,
           favoriteIds: favoriteIds,
           onToggleFavorite: onToggleFavorite,
@@ -259,6 +380,7 @@ class _PokemonBody extends StatelessWidget {
           ),
         ),
         _PokemonGrid(
+          heroNamespace: 'favorites',
           pokemon: favorites,
           favoriteIds: favoriteIds,
           onToggleFavorite: onToggleFavorite,
@@ -298,6 +420,8 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final appState = context.watch<PokemonExplorerState>();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
       child: Column(
@@ -309,14 +433,27 @@ class _Header extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFDEF7E9),
+                  color: Theme.of(context).colorScheme.primaryContainer,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
-                  Icons.catching_pokemon_rounded,
-                  color: Color(0xFF2E7D5B),
-                  size: 28,
-                ),
+                child:
+                    Icon(
+                          Icons.catching_pokemon_rounded,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onPrimaryContainer,
+                          size: 28,
+                        )
+                        .animate(
+                          onPlay: (controller) =>
+                              controller.repeat(reverse: true),
+                        )
+                        .scaleXY(
+                          begin: 0.92,
+                          end: 1.12,
+                          duration: 850.ms,
+                          curve: Curves.easeInOut,
+                        ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -339,10 +476,26 @@ class _Header extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: const Color(0xFF62706A),
+                        color: _mutedTextColor(context),
                       ),
                     ),
                   ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Tooltip(
+                message: appState.isDarkMode
+                    ? 'Switch to light mode'
+                    : 'Switch to dark mode',
+                child: IconButton.filledTonal(
+                  onPressed: context
+                      .read<PokemonExplorerState>()
+                      .toggleThemeMode,
+                  icon: Icon(
+                    appState.isDarkMode
+                        ? Icons.light_mode_rounded
+                        : Icons.dark_mode_rounded,
+                  ),
                 ),
               ),
             ],
@@ -352,12 +505,12 @@ class _Header extends StatelessWidget {
             width: double.infinity,
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: _surfaceColor(context),
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: const Color(0xFFE3E8E5)),
-              boxShadow: const [
+              border: Border.all(color: _borderColor(context)),
+              boxShadow: [
                 BoxShadow(
-                  color: Color(0x0F15211C),
+                  color: _shadowColor(context),
                   blurRadius: 18,
                   offset: Offset(0, 10),
                 ),
@@ -372,7 +525,7 @@ class _Header extends StatelessWidget {
                     icon: Icons.public_rounded,
                   ),
                 ),
-                Container(width: 1, height: 42, color: const Color(0xFFE3E8E5)),
+                Container(width: 1, height: 42, color: _borderColor(context)),
                 Expanded(
                   child: _StatTile(
                     label: 'Favorites',
@@ -414,7 +567,7 @@ class _StatTile extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Icon(icon, color: const Color(0xFF2E7D5B), size: 20),
+        Icon(icon, color: Theme.of(context).colorScheme.primary, size: 20),
         const SizedBox(width: 8),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -428,7 +581,7 @@ class _StatTile extends StatelessWidget {
             Text(
               label,
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: const Color(0xFF62706A),
+                color: _mutedTextColor(context),
                 fontWeight: FontWeight.w600,
               ),
             ),
@@ -454,6 +607,11 @@ class _SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final border = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(8),
+      borderSide: BorderSide(color: _borderColor(context)),
+    );
+
     return TextField(
       controller: controller,
       onChanged: onChanged,
@@ -469,18 +627,18 @@ class _SearchField extends StatelessWidget {
                 icon: const Icon(Icons.close_rounded),
               ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: _surfaceColor(context),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 14,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFFE3E8E5)),
-        ),
+        enabledBorder: border,
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF2E7D5B), width: 1.5),
+          borderSide: BorderSide(
+            color: Theme.of(context).colorScheme.primary,
+            width: 1.5,
+          ),
         ),
       ),
     );
@@ -489,6 +647,7 @@ class _SearchField extends StatelessWidget {
 
 class _PokemonGrid extends StatelessWidget {
   const _PokemonGrid({
+    required this.heroNamespace,
     required this.pokemon,
     required this.favoriteIds,
     required this.onToggleFavorite,
@@ -497,17 +656,18 @@ class _PokemonGrid extends StatelessWidget {
     required this.emptyState,
   });
 
+  final String heroNamespace;
   final List<PokemonCardData> pokemon;
   final Set<int> favoriteIds;
   final ValueChanged<PokemonCardData> onToggleFavorite;
-  final ValueChanged<PokemonCardData> onOpenDetails;
+  final void Function(PokemonCardData pokemon, Object heroTag) onOpenDetails;
   final Future<void> Function() onRefresh;
   final Widget emptyState;
 
   @override
   Widget build(BuildContext context) {
     return RefreshIndicator(
-      color: const Color(0xFF2E7D5B),
+      color: Theme.of(context).colorScheme.primary,
       onRefresh: onRefresh,
       child: LayoutBuilder(
         builder: (context, constraints) {
@@ -538,11 +698,13 @@ class _PokemonGrid extends StatelessWidget {
             itemCount: pokemon.length,
             itemBuilder: (context, index) {
               final item = pokemon[index];
+              final heroTag = '$heroNamespace-pokemon-${item.id}';
               return PokemonCard(
+                heroTag: heroTag,
                 pokemon: item,
                 isFavorite: favoriteIds.contains(item.id),
                 onFavoritePressed: () => onToggleFavorite(item),
-                onTap: () => onOpenDetails(item),
+                onTap: () => onOpenDetails(item, heroTag),
               );
             },
           );
@@ -552,15 +714,52 @@ class _PokemonGrid extends StatelessWidget {
   }
 }
 
+class _PokemonMorphFlight extends StatelessWidget {
+  const _PokemonMorphFlight({required this.pokemon});
+
+  final PokemonCardData pokemon;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: ColoredBox(
+          color: _pokemonAccent(context, pokemon),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final shortestSide = constraints.biggest.shortestSide;
+              final padding = shortestSide.isFinite
+                  ? (shortestSide * 0.08).clamp(0.0, 18.0)
+                  : 12.0;
+
+              return Padding(
+                padding: EdgeInsets.all(padding),
+                child: _PokemonArtwork(
+                  imageUrl: pokemon.imageUrl,
+                  fallbackImageUrl: pokemon.fallbackImageUrl,
+                ),
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class PokemonCard extends StatelessWidget {
   const PokemonCard({
     super.key,
+    required this.heroTag,
     required this.pokemon,
     required this.isFavorite,
     required this.onFavoritePressed,
     required this.onTap,
   });
 
+  final Object heroTag;
   final PokemonCardData pokemon;
   final bool isFavorite;
   final VoidCallback onFavoritePressed;
@@ -568,96 +767,123 @@ class PokemonCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(8),
-      elevation: 0,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Ink(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: const Color(0xFFE3E8E5)),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x0D15211C),
-                blurRadius: 16,
-                offset: Offset(0, 8),
-              ),
-            ],
+    final surface = _surfaceColor(context);
+    final border = _borderColor(context);
+    final pokemonAccent = _pokemonAccent(context, pokemon);
+
+    return Hero(
+      tag: heroTag,
+      createRectTween: _pokemonMorphRectTween,
+      flightShuttleBuilder:
+          (
+            flightContext,
+            animation,
+            direction,
+            fromHeroContext,
+            toHeroContext,
+          ) => _pokemonMorphFlight(
+            pokemon,
+            flightContext,
+            animation,
+            direction,
+            fromHeroContext,
+            toHeroContext,
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(8),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: Container(
-                          margin: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: pokemon.accentColor,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: _PokemonArtwork(
-                            imageUrl: pokemon.imageUrl,
-                            fallbackImageUrl: pokemon.fallbackImageUrl,
-                          ),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '#${pokemon.id.toString().padLeft(3, '0')}',
-                              style: Theme.of(context).textTheme.labelLarge
-                                  ?.copyWith(
-                                    color: const Color(0xFF2E7D5B),
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              pokemon.displayName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+      transitionOnUserGestures: true,
+      child: Material(
+        color: surface,
+        borderRadius: BorderRadius.circular(8),
+        elevation: 0,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          child: Ink(
+            decoration: BoxDecoration(
+              color: surface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: border),
+              boxShadow: [
+                BoxShadow(
+                  color: _shadowColor(context),
+                  blurRadius: 16,
+                  offset: Offset(0, 8),
                 ),
-                Positioned(
-                  top: 12,
-                  right: 12,
-                  child: Tooltip(
-                    message: isFavorite ? 'Remove favorite' : 'Add favorite',
-                    child: IconButton.filledTonal(
-                      onPressed: onFavoritePressed,
-                      style: IconButton.styleFrom(
-                        fixedSize: const Size.square(40),
-                        backgroundColor: Colors.white,
-                        foregroundColor: isFavorite
-                            ? const Color(0xFFE03A5D)
-                            : const Color(0xFF62706A),
-                      ),
-                      icon: Icon(
-                        isFavorite
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
+              ],
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: pokemonAccent,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: _PokemonArtwork(
+                              imageUrl: pokemon.imageUrl,
+                              fallbackImageUrl: pokemon.fallbackImageUrl,
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                '#${pokemon.id.toString().padLeft(3, '0')}',
+                                style: Theme.of(context).textTheme.labelLarge
+                                    ?.copyWith(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.primary,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                pokemon.displayName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: Theme.of(context).textTheme.titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w800),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    right: 12,
+                    child: Tooltip(
+                      message: isFavorite ? 'Remove favorite' : 'Add favorite',
+                      child: IconButton.filledTonal(
+                        onPressed: onFavoritePressed,
+                        style: IconButton.styleFrom(
+                          fixedSize: const Size.square(40),
+                          backgroundColor: surface,
+                          foregroundColor: isFavorite
+                              ? _dangerColor
+                              : _mutedTextColor(context),
+                        ),
+                        icon: Icon(
+                          isFavorite
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                        ),
                       ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -667,64 +893,103 @@ class PokemonCard extends StatelessWidget {
 }
 
 class PokemonDetailsPage extends StatelessWidget {
-  const PokemonDetailsPage({super.key, required this.pokemon});
+  const PokemonDetailsPage({
+    super.key,
+    required this.pokemon,
+    required this.heroTag,
+  });
 
   final PokemonCardData pokemon;
+  final Object heroTag;
 
   @override
   Widget build(BuildContext context) {
+    final pokemonAccent = _pokemonAccent(context, pokemon);
+
     return Scaffold(
       appBar: AppBar(title: Text(pokemon.displayName)),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
         children: [
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: pokemon.accentColor,
+          Hero(
+            tag: heroTag,
+            createRectTween: _pokemonMorphRectTween,
+            flightShuttleBuilder:
+                (
+                  flightContext,
+                  animation,
+                  direction,
+                  fromHeroContext,
+                  toHeroContext,
+                ) => _pokemonMorphFlight(
+                  pokemon,
+                  flightContext,
+                  animation,
+                  direction,
+                  fromHeroContext,
+                  toHeroContext,
+                ),
+            transitionOnUserGestures: true,
+            child: Material(
+              color: Colors.transparent,
               borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '#${pokemon.id.toString().padLeft(3, '0')}',
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: const Color(0xFF2E7D5B),
-                    fontWeight: FontWeight.w800,
-                  ),
+              child: Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: pokemonAccent,
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  pokemon.displayName,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w900,
-                  ),
+                child: Column(
+                  children: [
+                    Text(
+                      '#${pokemon.id.toString().padLeft(3, '0')}',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      pokemon.displayName,
+                      textAlign: TextAlign.center,
+                      style: Theme.of(context).textTheme.headlineMedium
+                          ?.copyWith(fontWeight: FontWeight.w900),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      height: 220,
+                      child: _PokemonArtwork(
+                        imageUrl: pokemon.imageUrl,
+                        fallbackImageUrl: pokemon.fallbackImageUrl,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 18),
-                SizedBox(
-                  height: 220,
-                  child: _PokemonArtwork(
-                    imageUrl: pokemon.imageUrl,
-                    fallbackImageUrl: pokemon.fallbackImageUrl,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
           _ImagePreviewCard(
-            title: 'Official artwork',
-            imageUrl: pokemon.imageUrl,
-            fallbackImageUrl: pokemon.fallbackImageUrl,
-          ),
+                title: 'Official artwork',
+                imageUrl: pokemon.imageUrl,
+                fallbackImageUrl: pokemon.fallbackImageUrl,
+              )
+              .animate()
+              .fadeIn(delay: 160.ms, duration: 260.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.04, duration: 260.ms, curve: Curves.easeOut),
           const SizedBox(height: 12),
           _ImagePreviewCard(
-            title: 'Fallback sprite',
-            imageUrl: pokemon.fallbackImageUrl,
-          ),
+                title: 'Fallback sprite',
+                imageUrl: pokemon.fallbackImageUrl,
+              )
+              .animate()
+              .fadeIn(delay: 220.ms, duration: 260.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.04, duration: 260.ms, curve: Curves.easeOut),
           const SizedBox(height: 16),
-          _InfoPanel(pokemon: pokemon),
+          _InfoPanel(pokemon: pokemon)
+              .animate()
+              .fadeIn(delay: 280.ms, duration: 260.ms, curve: Curves.easeOut)
+              .slideY(begin: 0.04, duration: 260.ms, curve: Curves.easeOut),
         ],
       ),
     );
@@ -748,9 +1013,9 @@ class _ImagePreviewCard extends StatelessWidget {
       height: 150,
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surfaceColor(context),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE3E8E5)),
+        border: Border.all(color: _borderColor(context)),
       ),
       child: Row(
         children: [
@@ -786,9 +1051,9 @@ class _InfoPanel extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surfaceColor(context),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFFE3E8E5)),
+        border: Border.all(color: _borderColor(context)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -829,7 +1094,7 @@ class _InfoRow extends StatelessWidget {
           Text(
             label,
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: const Color(0xFF62706A),
+              color: _mutedTextColor(context),
               fontWeight: FontWeight.w700,
             ),
           ),
@@ -855,11 +1120,7 @@ class _PokemonArtwork extends StatelessWidget {
       }
 
       return const Center(
-        child: Icon(
-          Icons.catching_pokemon_rounded,
-          color: Color(0xFF62706A),
-          size: 42,
-        ),
+        child: Icon(Icons.catching_pokemon_rounded, size: 42),
       );
     }
 
@@ -897,11 +1158,7 @@ class _NetworkPokemonImage extends StatelessWidget {
         }
 
         return const Center(
-          child: Icon(
-            Icons.image_not_supported_outlined,
-            color: Color(0xFF62706A),
-            size: 36,
-          ),
+          child: Icon(Icons.image_not_supported_outlined, size: 36),
         );
       },
     );
@@ -939,11 +1196,7 @@ class _ErrorState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(
-              Icons.wifi_off_rounded,
-              color: Color(0xFFE03A5D),
-              size: 44,
-            ),
+            const Icon(Icons.wifi_off_rounded, color: _dangerColor, size: 44),
             const SizedBox(height: 12),
             Text(
               'Could not load Pokemon',
@@ -957,7 +1210,7 @@ class _ErrorState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF62706A)),
+              ).textTheme.bodyMedium?.copyWith(color: _mutedTextColor(context)),
             ),
           ],
         ),
@@ -985,7 +1238,7 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: const Color(0xFF2E7D5B), size: 44),
+            Icon(icon, color: Theme.of(context).colorScheme.primary, size: 44),
             const SizedBox(height: 12),
             Text(
               title,
@@ -999,7 +1252,7 @@ class _EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
               style: Theme.of(
                 context,
-              ).textTheme.bodyMedium?.copyWith(color: const Color(0xFF62706A)),
+              ).textTheme.bodyMedium?.copyWith(color: _mutedTextColor(context)),
             ),
           ],
         ),
@@ -1026,14 +1279,14 @@ class _TabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
     bool overlapsContent,
   ) {
     return ColoredBox(
-      color: const Color(0xFFF5F7FA),
+      color: _pageBackground(context),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
         child: Container(
           height: 48,
           padding: const EdgeInsets.all(4),
           decoration: BoxDecoration(
-            color: const Color(0xFFE9EFEC),
+            color: _softSurfaceColor(context),
             borderRadius: BorderRadius.circular(8),
           ),
           child: tabBar,
